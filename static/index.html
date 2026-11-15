@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPHEREx Sky Time-Lapse Explorer</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#top" aria-label="SPHEREx Sky-Time Explorer home"><span class="brand-mark" aria-hidden="true">✦</span><span>SPHEREx<small>SKY-TIME EXPLORER</small></span></a>
+  <span class="topbar-note">NASA infrared sky observations</span>
+</header>
+
+<div class="app-shell" id="top">
+<section class="page-heading">
+  <div><p class="eyebrow">TIME-DOMAIN SKY VIEWER</p><h1>Watch the sky change.</h1><p class="subtitle">Explore real SPHEREx observations across time.</p></div>
+  <span class="data-badge"><span class="status-dot"></span>Live archive · cached results</span>
+</section>
+
+<aside class="how-to panel" id="how-to">
+  <div><p class="eyebrow">QUICK START</p><h2>How to explore this sky</h2>
+    <ol>
+      <li>Choose a target or enter sky coordinates, then press <strong>Go</strong>.</li>
+      <li>Use <strong>Movie</strong> or <strong>Blink</strong> to follow observations across dates.</li>
+      <li><strong>Difference</strong> compares last minus first: red means arrived/brighter, blue means left/dimmer. <strong>Deep</strong> stacks the observations for faint sources.</li>
+      <li>Scan the field, then click a star or a scan row to see motion and its infrared spectrum.</li>
+    </ol>
+  </div>
+  <button id="close-guide" class="dismiss-button" type="button" aria-expanded="true" aria-label="Collapse quick start guide" title="Collapse guide">−</button>
+</aside>
+
+<div class="preset-panel panel"><div class="preset-label"><span class="eyebrow">CHALLENGE TARGETS</span><span class="muted small">Load a known object in one click</span></div><div id="presets" class="presets"></div></div>
+
+<section class="controls panel">
+  <label>Right ascension (°) <input id="ra" type="number" step="0.0001" placeholder="e.g. 269.4463"></label>
+  <label>Declination (°) <input id="dec" type="number" step="0.0001" placeholder="e.g. 4.7677"></label>
+  <label>Detector
+    <select id="band">
+      <option value="D1">D1 · 0.75–1.1 µm</option>
+      <option value="D2">D2 · 1.1–1.6 µm</option>
+      <option value="D3">D3 · 1.6–2.4 µm</option>
+      <option value="D4">D4 · 2.4–3.8 µm</option>
+      <option value="D5">D5 · 3.8–4.4 µm</option>
+      <option value="D6">D6 · 4.4–5.0 µm</option>
+      <option value="RGB">RGB colour · D6/D3/D1</option>
+    </select>
+  </label>
+  <label>Field of view
+    <select id="size" title="Larger fields show more surrounding sky but take longer to fetch">
+      <option value="0.05">3′ · standard</option>
+      <option value="0.1">6′</option>
+      <option value="0.2">12′ · widest available</option>
+    </select>
+  </label>
+  <button id="go" class="primary">Go</button>
+  <button id="share">Copy link</button>
+  <a id="wiseview" target="_blank" rel="noopener">Compare in WiseView ↗</a>
+  <label class="offline-toggle"><input id="offline" type="checkbox"> Use saved data only</label>
+  <span class="control-hint">Cached-only mode uses observations already downloaded on this server.</span>
+</section>
+
+<div id="status" class="status hidden"></div>
+
+<main class="workspace">
+  <section class="player card">
+    <div class="modes">
+      <button data-mode="movie" class="mode active">Movie</button>
+      <button data-mode="blink" class="mode">Blink</button>
+      <button data-mode="diff" class="mode">Difference</button>
+      <button data-mode="deep" class="mode">Deep</button>
+    </div>
+    <div class="zoom-toolbar" role="group" aria-label="Image zoom controls">
+      <span>Zoom</span><button id="zoom-out" type="button" aria-label="Zoom out" disabled>−</button><output id="zoom-level">100%</output><button id="zoom-in" type="button" aria-label="Zoom in" disabled>+</button><button id="zoom-reset" type="button" disabled>Reset</button><span class="zoom-tip">Scroll to zoom · drag to pan · reset to click stars</span>
+    </div>
+    <div class="frame-wrap" id="frame-stage">
+      <img id="frame" alt="SPHEREx frame">
+      <div id="empty-state" class="empty-state"><div class="empty-symbol" aria-hidden="true">✦</div><h3 id="empty-title">Your sky view starts here</h3><p id="empty-message">Choose a target or enter coordinates, then press Go.</p></div>
+      <div class="crosshair" title="Target position (mid-mission)"></div>
+      <div class="compass"><span>N ↑</span><span>E ←</span></div>
+      <div id="gaiaoverlay"></div>
+      <div id="markers"></div>
+    </div>
+    <div id="frameinfo" class="frameinfo">—</div>
+    <div id="rgblegend" class="rgblegend hidden">
+      <span style="color:#ff6b6b">■ red</span> = D6 4.4–5.0 µm ·
+      <span style="color:#41c98b">■ green</span> = D3 1.6–2.4 µm ·
+      <span style="color:#5aa9ff">■ blue</span> = D1 0.75–1.1 µm.
+      Cold brown dwarfs look <b style="color:#ff6b6b">red</b>; ordinary stars look white or blue.
+    </div>
+    <div class="playback">
+      <button id="play">⏸</button>
+      <input id="scrub" type="range" min="0" max="0" value="0">
+      <label>Playback speed (left slower · right faster) <input id="speed" type="range" min="150" max="1500" step="50" value="1050"></label>
+    </div>
+    <div class="adjust">
+      <label>Brightness <input id="bright" type="range" min="50" max="250" value="100"></label>
+      <label>Contrast <input id="contrast" type="range" min="50" max="300" value="100"></label>
+      <label><input id="invert" type="checkbox"> Invert</label>
+    </div>
+    <p><button id="scanbtn" class="primary">🔍 Detect sources in this field</button>
+       <label class="small muted"><input id="showmarkers" type="checkbox" checked> show markers</label>
+       <label class="small muted" title="Gaia DR3 stars moved to the SPHEREx observation date"><input id="showgaia" type="checkbox" checked> Gaia stars on image</label></p>
+    <p id="gaiainfo" class="small muted"></p>
+    <p class="hint">The widest available view is 12′. Scan marks up to 60 point sources detected in the SPHEREx image; select a marker or result row to inspect its motion and spectrum. Detection is limited by image quality and is not a complete sky catalogue.</p>
+    <p id="freshness" class="muted"></p>
+  </section>
+
+  <section class="side">
+    <div class="card">
+      <h2 id="tname">Target</h2>
+      <p id="tdesc" class="muted"></p>
+    </div>
+
+    <div id="moverscard" class="card hidden">
+      <h2>Moving objects in this field</h2>
+      <div id="moversbody"></div>
+    </div>
+
+    <div id="motioncard" class="card hidden">
+      <h2 id="motiontitle">Motion measured from SPHEREx</h2>
+      <div id="motionbody"></div>
+    </div>
+
+    <div id="lccard" class="card hidden">
+      <h2>Brightness over time</h2>
+      <div class="chartbox"><canvas id="lcchart"></canvas></div>
+      <p class="muted small">Each point is one SPHEREx image. Part of the scatter is colour: every image samples a slightly different wavelength.</p>
+    </div>
+
+    <div class="card">
+      <h2>Spectrum <span id="speclabel" class="muted small"></span></h2>
+      <button id="specbtn">Show spectrum of target</button>
+      <div class="chartbox"><canvas id="specchart"></canvas></div>
+      <p class="muted small">Built on the fly from every SPHEREx image of the source: each image gives one wavelength.</p>
+    </div>
+
+    <div class="card map-card">
+      <h2>Sky map</h2>
+      <div class="maptoggles">
+        <label><input id="gaia" type="checkbox" checked> Gaia catalogue (sky map)</label>
+        <label><input id="wise" type="checkbox"> WISE images (sky map)</label>
+      </div>
+      <div id="aladin"></div>
+    </div>
+  </section>
+</main>
+
+<section class="panel gallery-panel" aria-label="Individual observation epochs">
+  <div class="panel-heading"><div><p class="eyebrow">EPOCH BY EPOCH</p><h2>Observation frames</h2><p class="muted small">Select any epoch to inspect it in the main viewer.</p></div><span id="gallery-count" class="count-badge">No frames loaded</span></div>
+  <div id="frame-gallery" class="epoch-gallery"><p class="gallery-empty">Load a target to browse its individual observations.</p></div>
+</section>
+
+<section class="panel about-panel" id="about-results">
+  <div class="about-intro"><p class="eyebrow">THE SCIENCE</p><h2>About SPHEREx &amp; our results</h2>
+    <p>SPHEREx is a NASA infrared space telescope that surveys the sky in many wavelength bands. This project compares repeated observations to help users notice objects that move or change brightness.</p>
+    <p>Nearby stars and cold brown dwarfs are valuable targets. Infrared observations can reveal objects that are faint in visible light, while repeated views help measure their motion.</p>
+  </div>
+  <div class="results-table-wrap"><h3>Motion measurements</h3><p class="table-scroll-hint">Swipe horizontally on a phone to see every column.</p>
+    <table class="results-table"><thead><tr><th>Target</th><th>SPHEREx (this tool)</th><th>Reference</th></tr></thead><tbody>
+      <tr><td>Barnard&rsquo;s Star · D3</td><td>10.17 ± 0.44″/yr</td><td>10.39″/yr · Gaia DR3 ✓</td></tr>
+      <tr><td>Epsilon Indi B · D3</td><td>4.53 ± 0.28″/yr</td><td>4.71″/yr · <a href="https://arxiv.org/abs/astro-ph/0212487" target="_blank" rel="noopener">published</a> ✓</td></tr>
+      <tr><td>Epsilon Indi B · D6</td><td>4.51 ± 0.28″/yr</td><td>4.71″/yr · <a href="https://arxiv.org/abs/astro-ph/0212487" target="_blank" rel="noopener">published</a> ✓</td></tr>
+      <tr><td>WISE 0855 · D6 (stacked)</td><td>8.96 ± 1.21″/yr</td><td>8.13″/yr · <a href="https://www.aanda.org/articles/aa/pdf/2016/08/aa28662-16.pdf" target="_blank" rel="noopener">published</a> ✓</td></tr>
+    </tbody></table>
+  </div>
+  <div class="key-finding"><strong>Key finding</strong><p>Our scan finds Epsilon Indi B moving, yet it is not in Gaia at all: cold brown dwarfs are too faint in visible light for Gaia, but bright in SPHEREx's infrared. That is why SPHEREx can reveal nearby objects Gaia misses. Its spectrum shows water and methane absorption, the signature of a cold brown-dwarf atmosphere. WISE 0855, the coldest known brown dwarf, is invisible in single SPHEREx images, but stacking each six-month pass reveals it, and its measured motion matches the published value.</p></div>
+  <div class="limitations-grid"><div><h3>Limitations</h3><p>Very bright (saturated) stars keep a small position offset. Faint objects measured on stacked images have larger uncertainties. Candidate movers need checking by eye. The sky map depends on the external CDS/Aladin service.</p></div>
+    <div><h3>Data &amp; tools</h3><p>SPHEREx observations are fetched from NASA/IPAC IRSA and cached for 24 hours; the five challenge targets are pre-cached. The project uses Gaia DR3, Astropy, astroquery, reproject, Aladin Lite and Chart.js.</p></div></div>
+  <p class="team-credit">Built by Team Beyond Red · NASA Space Apps Challenge 2026</p>
+</section>
+
+<footer>
+  SPHEREx data: NASA/JPL-Caltech, served by NASA/IPAC IRSA. Sky map: Aladin Lite (CDS). Built with Astropy, astroquery and reproject.
+</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
