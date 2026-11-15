@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+astropy
+astroquery
+pyvo
+numpy
+scipy
+matplotlib
+reproject
+pillow
+requests
+mcp
